@@ -113,14 +113,14 @@ class SystemCall {
 function task1() {
     for ($i = 1; $i <= 10; ++$i) {
         echo "This is task 1 iteration $i.\n";
-        yield;
+        yield;                //must be co
     }
 }
 
 function task2() {
     for ($i = 1; $i <= 5; ++$i) {
         echo "This is task 2 iteration $i.\n";
-        yield;
+        yield;                //must be co
     }
 }
 
@@ -128,7 +128,7 @@ function task($max){
 	$tid=(yield getTaskId()); // <-- here's the syscall!
 	for($i=1;$i<=$max;++$i){
 		echo "This is task $tid iteration $i.\n";
-		yield;
+		yield;        //must be co
 	}
 }
 
