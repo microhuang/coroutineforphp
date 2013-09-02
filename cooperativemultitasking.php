@@ -84,13 +84,13 @@ class Scheduler {
 
     public function run() {
         while (!$this->taskQueue->isEmpty()) {
-            $task = $this->taskQueue->dequeue();
+            $task = $this->taskQueue->dequeue();   //轮询调度算法
             $task->run();
 
             if ($task->isFinished()) {
                 unset($this->taskMap[$task->getTaskId()]);
             } else {
-                $this->schedule($task);
+                $this->schedule($task);    //轮询调度算法
             }
         }
     }
