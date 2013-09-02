@@ -37,24 +37,6 @@ function getTaskId_v2() {
         }
     }
 
-public function run_v2() {
-    while (!$this->taskQueue->isEmpty()) {
-        $task = $this->taskQueue->dequeue();
-        $retval = $task->run();
-
-        if ($retval instanceof SystemCall) {
-            $retval($task, $this);
-            continue;
-        }
-
-        if ($task->isFinished()) {
-            unset($this->taskMap[$task->getTaskId()]);
-        } else {
-            $this->schedule($task);
-        }
-    }
-}
-
     public function isFinished() {
         return !$this->coroutine->valid();
     }
@@ -93,6 +75,24 @@ class Scheduler {
                 $this->schedule($task);    //轮询调度算法
             }
         }
+    }
+
+    public function run_v2() {
+      while (!$this->taskQueue->isEmpty()) {
+        $task = $this->taskQueue->dequeue();
+        $retval = $task->run();
+
+        if ($retval instanceof SystemCall) {
+            $retval($task, $this);
+            continue;
+        }
+
+        if ($task->isFinished()) {
+            unset($this->taskMap[$task->getTaskId()]);
+        } else {
+            $this->schedule($task);
+        }
+      }
     }
 }
 
