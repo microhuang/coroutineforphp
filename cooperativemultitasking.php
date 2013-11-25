@@ -51,6 +51,73 @@ class Scheduler {
     public function __construct() {
         $this->taskQueue = new SplQueue();
     }
+    
+    // resourceID => [socket, tasks]
+    protected $waitingForRead = [];
+    protected $waitingForWrite = [];
+
+    public function waitForRead($socket, Task $task) {
+        if (isset($this->waitingForRead[(int) $socket])) {
+            $this->waitingForRead[(int) $socket][1][] = $task;
+        } else {
+            $this->waitingForRead[(int) $socket] = [$socket, [$task]];
+        }
+    }
+
+    public function waitForWrite($socket, Task $task) {
+        if (isset($this->waitingForWrite[(int) $socket])) {
+            $this->waitingForWrite[(int) $socket][1][] = $task;
+        } else {
+            $this->waitingForWrite[(int) $socket] = [$socket, [$task]];
+        }
+    }
+    
+    protected function ioPoll($timeout) {
+        $rSocks = [];
+        foreach ($this->waitingForRead as list($socket)) {
+            $rSocks[] = $socket;
+        }
+
+        $wSocks = [];
+        foreach ($this->waitingForWrite as list($socket)) {
+            $wSocks[] = $socket;
+        }
+
+        $eSocks = []; // dummy
+
+        if (!stream_select($rSocks, $wSocks, $eSocks, $timeout)) {
+            return;
+        }
+
+        foreach ($rSocks as $socket) {
+            list(, $tasks) = $this->waitingForRead[(int) $socket];
+            unset($this->waitingForRead[(int) $socket]);
+
+            foreach ($tasks as $task) {
+                $this->schedule($task);
+            }
+        }
+
+        foreach ($wSocks as $socket) {
+            list(, $tasks) = $this->waitingForWrite[(int) $socket];
+            unset($this->waitingForWrite[(int) $socket]);
+
+            foreach ($tasks as $task) {
+                $this->schedule($task);
+            }
+        }
+    }
+    
+    protected function ioPollTask() {
+        while (true) {
+            if ($this->taskQueue->isEmpty()) {
+                $this->ioPoll(null);
+            } else {
+                $this->ioPoll(0);
+            }
+            yield;
+        }
+    }
 
     public function newTask(Generator $coroutine) {
         $tid = ++$this->maxTaskId;
@@ -115,6 +182,23 @@ class Scheduler {
     }
 }
 
+
+
+function waitForRead($socket) {
+    return new SystemCall(
+        function(Task $task, Scheduler $scheduler) use ($socket) {
+            $scheduler->waitForRead($socket, $task);
+        }
+    );
+}
+
+function waitForWrite($socket) {
+    return new SystemCall(
+        function(Task $task, Scheduler $scheduler) use ($socket) {
+            $scheduler->waitForWrite($socket, $task);
+        }
+    );
+}
 
 function getTaskId() {
     return new SystemCall(function(Task $task, Scheduler $scheduler) {
@@ -182,27 +266,69 @@ function task($max){
             yield;
         }
     }
-    function ptask() {
-        $tid = (yield getTaskId());
-        $childTid = (yield newTask(childTask()));
+function ptask() {
+    $tid = (yield getTaskId());
+    $childTid = (yield newTask(childTask()));
 
-        for ($i = 1; $i <= 6; ++$i) {
-            echo "Parent task $tid iteration $i.\n";
-            yield;
+    for ($i = 1; $i <= 6; ++$i) {
+        echo "Parent task $tid iteration $i.\n";
+        yield;
 
-            if ($i == 3) yield killTask($childTid);
-        }
+        if ($i == 3) yield killTask($childTid);
     }
+}
+
+
+function server($port) {
+    echo "Starting server at port $port...\n";
+
+    $socket = @stream_socket_server("tcp://localhost:$port", $errNo, $errStr);
+    if (!$socket) throw new Exception($errStr, $errNo);
+
+    stream_set_blocking($socket, 0);
+
+    while (true) {
+        yield waitForRead($socket);
+        $clientSocket = stream_socket_accept($socket, 0);
+        yield newTask(handleClient($clientSocket));
+    }
+}
+
+function handleClient($socket) {
+    yield waitForRead($socket);
+    $data = fread($socket, 8192);
+
+    $msg = "Received following request:\n\n$data";
+    $msgLength = strlen($msg);
+
+    $response = <<<RES
+HTTP/1.1 200 OK\r
+Content-Type: text/plain\r
+Content-Length: $msgLength\r
+Connection: close\r
+\r
+$msg
+RES;
+
+    yield waitForWrite($socket);
+    fwrite($socket, $response);
+
+    fclose($socket);
+}
 
 
 $scheduler = new Scheduler;
 
-$scheduler->newTask(task1());
-$scheduler->newTask(task2());
+//$scheduler->newTask(task1());
+//$scheduler->newTask(task2());
 
 //$scheduler->newTask(task(10));
 //$scheduler->newTask(task(5));
 
 //$scheduler->newTask(ptask());
+
+
+$scheduler->newTask(server(8000));
+
 
 $scheduler->run();   //输出结果：task1、task2交替运行，当task2结束后，task1继续运行直到完成退出。
