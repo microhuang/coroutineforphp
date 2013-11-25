@@ -168,6 +168,7 @@ class Scheduler {
     }
 
     public function run() {
+      $this->newTask($this->ioPollTask());
       while (!$this->taskQueue->isEmpty()) {
         $task = $this->taskQueue->dequeue();
         $retval = $task->run();
