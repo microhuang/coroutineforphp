@@ -5,6 +5,7 @@ class Task {
     protected $coroutine;
     protected $sendValue = null;
     protected $beforeFirstYield = true;
+    protected $exception = null;
 
     public function __construct($taskId, Generator $coroutine) {
         $this->taskId = $taskId;
@@ -26,11 +27,30 @@ class Task {
     public function setSendValue($sendValue) {
         $this->sendValue = $sendValue;
     }
+    
+    public function setException($exception) {
+        $this->exception = $exception;
+    }
 
+    public function run_v1() {
+        if ($this->beforeFirstYield) {
+            $this->beforeFirstYield = false;
+            return $this->coroutine->current();
+        } else {
+            $retval = $this->coroutine->send($this->sendValue);
+            $this->sendValue = null;
+            return $retval;
+        }
+    }
+    
     public function run() {
         if ($this->beforeFirstYield) {
             $this->beforeFirstYield = false;
             return $this->coroutine->current();
+        } elseif ($this->exception) {
+            $retval = $this->coroutine->throw($this->exception);
+            $this->exception = null;
+            return $retval;
         } else {
             $retval = $this->coroutine->send($this->sendValue);
             $this->sendValue = null;
@@ -192,7 +212,7 @@ class Scheduler {
 }
 
 
-function stackedCoroutine(Generator $gen) {
+function stackedCoroutine_v1(Generator $gen) {
     $stack = new SplStack;
 
     for (;;) {
@@ -216,6 +236,56 @@ function stackedCoroutine(Generator $gen) {
         }
 
         $gen->send(yield $gen->key() => $value);
+    }
+}
+
+function stackedCoroutine(Generator $gen) {
+    $stack = new SplStack;
+    $exception = null;
+
+    for (;;) {
+        try {
+            if ($exception) {
+                $gen->throw($exception);
+                $exception = null;
+                continue;
+            }
+
+            $value = $gen->current();
+
+            if ($value instanceof Generator) {
+                $stack->push($gen);
+                $gen = $value;
+                continue;
+            }
+
+            $isReturnValue = $value instanceof CoroutineReturnValue;
+            if (!$gen->valid() || $isReturnValue) {
+                if ($stack->isEmpty()) {
+                    return;
+                }
+
+                $gen = $stack->pop();
+                $gen->send($isReturnValue ? $value->getValue() : NULL);
+                continue;
+            }
+
+            try {
+                $sendValue = (yield $gen->key() => $value);
+            } catch (Exception $e) {
+                $gen->throw($e);
+                continue;
+            }
+
+            $gen->send($sendValue);
+        } catch (Exception $e) {
+            if ($stack->isEmpty()) {
+                throw $e;
+            }
+
+            $gen = $stack->pop();
+            $exception = $e;
+        }
     }
 }
 
@@ -271,6 +341,16 @@ function getTaskId() {
                 $task->setSendValue($scheduler->killTask($tid));
                 $scheduler->schedule($task);
             }
+        );
+    }
+    function killTask_v2($tid) {
+        return new SystemCall(function(Task $task, Scheduler $scheduler) use ($tid) {
+            if ($scheduler->killTask($tid)) {
+                $scheduler->schedule($task);
+            } else {
+                throw new InvalidArgumentException('Invalid task ID!');
+            }
+        }
         );
     }
 
