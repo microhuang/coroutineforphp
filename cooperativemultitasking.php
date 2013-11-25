@@ -230,6 +230,10 @@ class CoroutineReturnValue {
     }
 }
 
+function retval($value) {
+    return new CoroutineReturnValue($value);
+}
+
 
 function waitForRead($socket) {
     return new SystemCall(
