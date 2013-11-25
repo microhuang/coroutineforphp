@@ -83,7 +83,7 @@ class Scheduler {
         $this->taskQueue->enqueue($task);
     }
 
-    public function run() {
+    public function run_v1() {
         while (!$this->taskQueue->isEmpty()) {
             $task = $this->taskQueue->dequeue();   //轮询调度算法
             $task->run();
@@ -96,7 +96,7 @@ class Scheduler {
         }
     }
 
-    public function run_v2() {
+    public function run() {
       while (!$this->taskQueue->isEmpty()) {
         $task = $this->taskQueue->dequeue();
         $retval = $task->run();
@@ -116,6 +116,14 @@ class Scheduler {
 }
 
 
+function getTaskId() {
+    return new SystemCall(function(Task $task, Scheduler $scheduler) {
+        $task->setSendValue($task->getTaskId());
+        $scheduler->schedule($task);
+    });
+}
+
+
 class SystemCall {
     protected $callback;
 
@@ -128,6 +136,7 @@ class SystemCall {
         return $callback($task, $scheduler);
     }
 }
+
 
 function task1() {
     for ($i = 1; $i <= 10; ++$i) {
@@ -151,7 +160,7 @@ function task($max){
 	}
 }
 
-/*
+
     function newTask(Generator $coroutine) {
         return new SystemCall(function(Task $task, Scheduler $scheduler) use ($coroutine) {
                 $task->setSendValue($scheduler->newTask($coroutine));
@@ -173,7 +182,7 @@ function task($max){
             yield;
         }
     }
-    function task() {
+    function ptask() {
         $tid = (yield getTaskId());
         $childTid = (yield newTask(childTask()));
 
@@ -184,7 +193,7 @@ function task($max){
             if ($i == 3) yield killTask($childTid);
         }
     }
-*/
+
 
 $scheduler = new Scheduler;
 
@@ -194,6 +203,6 @@ $scheduler->newTask(task2());
 //$scheduler->newTask(task(10));
 //$scheduler->newTask(task(5));
 
-//$scheduler->newTask(task());
+//$scheduler->newTask(ptask());
 
 $scheduler->run();   //输出结果：task1、task2交替运行，当task2结束后，task1继续运行直到完成退出。
