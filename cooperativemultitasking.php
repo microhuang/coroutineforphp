@@ -73,6 +73,10 @@ class Scheduler {
     }
     
     protected function ioPoll($timeout) {
+    	if (empty($this->waitingForRead) && empty($this->waitingForWrite)) {
+            return;
+        }
+        
         $rSocks = [];
         foreach ($this->waitingForRead as list($socket)) {
             $rSocks[] = $socket;
@@ -207,6 +211,20 @@ function getTaskId() {
     });
 }
 
+    function newTask(Generator $coroutine) {
+        return new SystemCall(function(Task $task, Scheduler $scheduler) use ($coroutine) {
+                $task->setSendValue($scheduler->newTask($coroutine));
+                $scheduler->schedule($task);
+            }
+        );
+    }
+    function killTask($tid) {
+        return new SystemCall(function(Task $task, Scheduler $scheduler) use ($tid) {
+                $task->setSendValue($scheduler->killTask($tid));
+                $scheduler->schedule($task);
+            }
+        );
+    }
 
 class SystemCall {
     protected $callback;
@@ -245,20 +263,6 @@ function task($max){
 }
 
 
-    function newTask(Generator $coroutine) {
-        return new SystemCall(function(Task $task, Scheduler $scheduler) use ($coroutine) {
-                $task->setSendValue($scheduler->newTask($coroutine));
-                $scheduler->schedule($task);
-            }
-        );
-    }
-    function killTask($tid) {
-        return new SystemCall(function(Task $task, Scheduler $scheduler) use ($tid) {
-                $task->setSendValue($scheduler->killTask($tid));
-                $scheduler->schedule($task);
-            }
-        );
-    }
     function childTask() {
         $tid = (yield getTaskId());
         while (true) {
