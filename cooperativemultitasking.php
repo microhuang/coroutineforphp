@@ -15,12 +15,12 @@ class Task {
         return $this->taskId;
     }
 
-function getTaskId_v2() {
-    return new SystemCall(function(Task $task, Scheduler $scheduler) {
-        $task->setSendValue($task->getTaskId());
-        $scheduler->schedule($task);
-    });
-}
+    function getTaskId_v2() {
+        return new SystemCall(function(Task $task, Scheduler $scheduler) {
+            $task->setSendValue($task->getTaskId());
+            $scheduler->schedule($task);
+        });
+    }
 
     public function setSendValue($sendValue) {
         $this->sendValue = $sendValue;
@@ -58,6 +58,25 @@ class Scheduler {
         $this->taskMap[$tid] = $task;
         $this->schedule($task);
         return $tid;
+    }
+    
+    public function killTask($tid) {
+        if (!isset($this->taskMap[$tid])) {
+            return false;
+        }
+
+        unset($this->taskMap[$tid]);
+
+        // This is a bit ugly and could be optimized so it does not have to walk the queue,
+        // but assuming that killing tasks is rather rare I won't bother with it now
+        foreach ($this->taskQueue as $i => $task) {
+            if ($task->getTaskId() === $tid) {
+                unset($this->taskQueue[$i]);
+                break;
+            }
+        }
+
+        return true;
     }
 
     public function schedule(Task $task) {
@@ -132,6 +151,41 @@ function task($max){
 	}
 }
 
+/*
+    function newTask(Generator $coroutine) {
+        return new SystemCall(function(Task $task, Scheduler $scheduler) use ($coroutine) {
+                $task->setSendValue($scheduler->newTask($coroutine));
+                $scheduler->schedule($task);
+            }
+        );
+    }
+    function killTask($tid) {
+        return new SystemCall(function(Task $task, Scheduler $scheduler) use ($tid) {
+                $task->setSendValue($scheduler->killTask($tid));
+                $scheduler->schedule($task);
+            }
+        );
+    }
+    function childTask() {
+        $tid = (yield getTaskId());
+        while (true) {
+            echo "Child task $tid still alive!\n";
+            yield;
+        }
+    }
+    function task() {
+        $tid = (yield getTaskId());
+        $childTid = (yield newTask(childTask()));
+
+        for ($i = 1; $i <= 6; ++$i) {
+            echo "Parent task $tid iteration $i.\n";
+            yield;
+
+            if ($i == 3) yield killTask($childTid);
+        }
+    }
+*/
+
 $scheduler = new Scheduler;
 
 $scheduler->newTask(task1());
@@ -139,5 +193,7 @@ $scheduler->newTask(task2());
 
 //$scheduler->newTask(task(10));
 //$scheduler->newTask(task(5));
+
+//$scheduler->newTask(task());
 
 $scheduler->run();   //输出结果：task1、task2交替运行，当task2结束后，task1继续运行直到完成退出。
