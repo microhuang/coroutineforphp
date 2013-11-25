@@ -55,6 +55,7 @@ class Scheduler {
     // resourceID => [socket, tasks]
     protected $waitingForRead = [];
     protected $waitingForWrite = [];
+    public $isIoPollTask = false;
 
     public function waitForRead($socket, Task $task) {
         if (isset($this->waitingForRead[(int) $socket])) {
@@ -168,7 +169,9 @@ class Scheduler {
     }
 
     public function run() {
+    	if($this->isIoPollTask){
       $this->newTask($this->ioPollTask());
+    	}
       while (!$this->taskQueue->isEmpty()) {
         $task = $this->taskQueue->dequeue();
         $retval = $task->run();
@@ -334,6 +337,7 @@ $scheduler = new Scheduler;
 
 
 $scheduler->newTask(server(8000));
+$scheduler->isIoPollTask=true;
 
 
 $scheduler->run();   //输出结果：task1、task2交替运行，当task2结束后，task1继续运行直到完成退出。
