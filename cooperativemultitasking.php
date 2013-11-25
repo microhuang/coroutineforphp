@@ -8,7 +8,8 @@ class Task {
 
     public function __construct($taskId, Generator $coroutine) {
         $this->taskId = $taskId;
-        $this->coroutine = $coroutine;
+        //$this->coroutine = $coroutine;
+        $this->coroutine = StackedCoroutine($coroutine);
     }
 
     public function getTaskId() {
