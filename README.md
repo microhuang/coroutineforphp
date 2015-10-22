@@ -11,6 +11,9 @@ http://www.shankka.net/archives/71
 
 
 yield $key=>$value                   key为$key，value为$value
+
 yield $value                         key为自增值，value为$value
+
 yield                                key为自增值，value为null
+
 (yield...)                           yield表达式
